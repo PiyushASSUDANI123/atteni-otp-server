@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+
+# Environment variables
+.env
+
+# whatsapp-web.js session & cache files
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Firebase service account key (keep it out of source control)
+buspro-4767d-firebase-adminsdk-fbsvc-6b3ea1d48e.json
+*-firebase-adminsdk-*.json
+
+# macOS
+.DS_Store
+
+# logs
+*.log
