@@ -1,0 +1,8 @@
+cors
+dotenv
+express
+express-rate-limit
+firebase-admin
+pm2
+qrcode-terminal
+whatsapp-web.js
