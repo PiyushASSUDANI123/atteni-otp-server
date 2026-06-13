@@ -34,7 +34,7 @@ const client = new Client({
 
 client.on('qr', (qr) => {
     console.log('SCAN THIS QR CODE WITH YOUR WHATSAPP:');
-    qrcode.generate(qr, { small: true });
+    qrcode.generate(qr, {small: true}); // {small: true} lagana zaroori hai!
 });
 
 client.on('ready', () => {
