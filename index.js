@@ -25,10 +25,21 @@ app.use(express.json());
 
 // Initialize WhatsApp Client
 const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
+    authStrategy: new LocalAuth({ 
+        clientId: 'atteni-server', 
+        dataPath: '.wwebjs_auth' 
+    }),
     puppeteer: {
-        // executablePath: '/usr/bin/chromium-browser', // Commented out for local macOS development
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        // executablePath: '/usr/bin/chromium-browser', // Uncomment on Ubuntu if needed
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+        ]
     }
 });
 
