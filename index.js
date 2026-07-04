@@ -27,7 +27,7 @@ app.use(express.json());
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: '.wwebjs_auth' }),
     puppeteer: {
-        executablePath: '/usr/bin/chromium-browser', 
+        // executablePath: '/usr/bin/chromium-browser', // Commented out for local macOS development
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     }
 });
@@ -95,31 +95,40 @@ app.post('/api/request-otp', otpLimiter, async (req, res) => {
     }
     
     try {
-        // Gatekeeper Check
-        if (type === 'forgot') {
-            const userSnap = await db.ref(`/artifacts/student-system-v2/public/data/parent_accounts/${phoneNumber}`).once('value');
-            if (!userSnap.exists()) {
-                console.log(`[API] /send-otp FAIL: User not found in parent_accounts for ${phoneNumber}`);
-                return res.status(404).json({ success: false, message: "no user found linked with this mobile no" });
-            }
-        } else if (type === 'signup') {
-            const studentsSnap = await db.ref(`/artifacts/student-system-v2/public/data/students`).once('value');
-            let found = false;
-            if (studentsSnap.exists()) {
-                const students = studentsSnap.val();
-                for (const key in students) {
-                    let phones = students[key].parentPhones || [];
-                    if (!Array.isArray(phones)) phones = [phones];
-                    if (phones.some(p => String(p).replace(/\D/g, '').slice(-10) === phoneNumber)) {
-                        found = true;
-                        break;
+        // Gatekeeper Check (Multi-Tenancy Support)
+        const rootDataSnap = await db.ref(`/artifacts/student-system-v2/public/data`).once('value');
+        let found = false;
+        
+        if (rootDataSnap.exists()) {
+            const rootData = rootDataSnap.val();
+            
+            if (type === 'forgot') {
+                for (const schoolKey in rootData) {
+                    if (schoolKey === 'parent_accounts' && rootData[schoolKey][phoneNumber]) found = true;
+                    if (rootData[schoolKey] && rootData[schoolKey].parent_accounts && rootData[schoolKey].parent_accounts[phoneNumber]) found = true;
+                    if (found) break;
+                }
+            } else if (type === 'signup') {
+                for (const schoolKey in rootData) {
+                    const studentsObj = (schoolKey === 'students') ? rootData[schoolKey] : (rootData[schoolKey] ? rootData[schoolKey].students : null);
+                    if (studentsObj) {
+                        for (const key in studentsObj) {
+                            let phones = studentsObj[key].parentPhones || [];
+                            if (!Array.isArray(phones)) phones = [phones];
+                            if (phones.some(p => String(p).replace(/\D/g, '').slice(-10) === phoneNumber)) {
+                                found = true;
+                                break;
+                            }
+                        }
                     }
+                    if (found) break;
                 }
             }
-            if (!found) {
-                console.log(`[API] /send-otp FAIL: User not found in students for ${phoneNumber}`);
-                return res.status(404).json({ success: false, message: "no user found linked with this mobile no" });
-            }
+        }
+
+        if (!found) {
+            console.log(`[API] /send-otp FAIL: User not found for ${phoneNumber} (${type})`);
+            return res.status(404).json({ success: false, message: "no user found linked with this mobile no" });
         }
 
         // 2. Generate OTP & Expiry Time
@@ -202,6 +211,60 @@ app.post('/api/verify-otp', async (req, res) => {
         return res.status(500).json({ success: false, message: "server error" });
     }
 });
+
+// --- NEW FCM BROADCAST ROUTE START ---
+const { getMessaging } = require('firebase-admin/messaging');
+
+app.post('/api/broadcast', async (req, res) => {
+    const { title, message } = req.body;
+
+    if (!title || !message) {
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Title aur message dono bhejna zaroori hai!' 
+        });
+    }
+
+    try {
+        const fcmPayload = {
+            notification: {
+                title: title,
+                body: message
+            },
+            topic: 'all_users'
+        };
+
+        const response = await getMessaging().send(fcmPayload);
+        
+        console.log('[FCM] Broadcast successfully sent:', response);
+        return res.status(200).json({ 
+            success: true, 
+            message: 'Broadcast sabko successfully bhej diya gaya!', 
+            response 
+        });
+    } catch (error) {
+        console.error('[FCM] Error sending broadcast:', error);
+        return res.status(500).json({ 
+            success: false, 
+            error: 'Notification bhejte waqt server par error aaya.' 
+        });
+    }
+});
+// --- NEW FCM BROADCAST ROUTE END ---
+
+// --- FIREBASE CONFIG ROUTE START ---
+app.get('/api/firebase-config', (req, res) => {
+    res.json({
+        apiKey: "AIzaSyBC3tfhCq53pA2kNJtL8GFsC8F-OSCaJ9Q",
+        authDomain: "buspro-4767d.firebaseapp.com",
+        databaseURL: "https://buspro-4767d-default-rtdb.firebaseio.com",
+        projectId: "buspro-4767d",
+        storageBucket: "buspro-4767d.firebasestorage.app",
+        messagingSenderId: "772721278896",
+        appId: "1:772721278896:android:84df6b64cc19d5772c2075"
+    });
+});
+// --- FIREBASE CONFIG ROUTE END ---
 
 // Start Express Server
 app.listen(port, () => {
