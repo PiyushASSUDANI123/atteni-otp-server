@@ -58,9 +58,15 @@ client.on('auth_failure', msg => {
 
 client.on('disconnected', (reason) => {
     console.log('Client was logged out', reason);
+    console.log('Exiting process so PM2 can restart...');
+    process.exit(1);
 });
 
-client.initialize();
+client.initialize().catch(err => {
+    console.error('Failed to initialize WhatsApp client:', err);
+    console.log('Exiting process so PM2 can restart...');
+    process.exit(1);
+});
 
 const formatPhoneNumber = (number) => {
     let cleanNumber = number.replace(/\D/g, '');
