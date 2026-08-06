@@ -120,6 +120,10 @@ app.post('/api/tasks/users/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
+        if (data.is_active === false) {
+            return res.status(403).json({ error: 'Account has been deactivated by the administrator.' });
+        }
+
         res.json({ success: true, user: data });
     } catch (err) {
         console.error(err);
@@ -150,6 +154,33 @@ app.post('/api/tasks/users/create', async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+// Toggle User Status
+app.post('/api/tasks/users/toggle_status', async (req, res) => {
+    try {
+        const { username, is_active } = req.body;
+        if (!username || typeof is_active !== 'boolean') {
+            return res.status(400).json({ error: 'Missing username or is_active boolean' });
+        }
+
+        const { data, error } = await supabase
+            .from('task_users')
+            .update({ is_active })
+            .eq('username', username)
+            .select()
+            .single();
+
+        if (error) {
+            console.error(error);
+            return res.status(400).json({ error: error.message });
+        }
+
+        res.json({ success: true, user: data });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 // Get All Task Users (For Admin Panel to display credentials)
 app.get('/api/tasks/users/get_all', async (req, res) => {
     try {
