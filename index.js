@@ -7,6 +7,12 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 const { getAuth } = require('firebase-admin/auth');
 const rateLimit = require('express-rate-limit');
+const { createClient } = require('@supabase/supabase-js');
+
+// Initialize Supabase
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Initialize Firebase Admin
 const serviceAccount = require('./buspro-4767d-firebase-adminsdk-fbsvc-6b3ea1d48e.json');
@@ -22,6 +28,141 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// ==========================================
+// SUPABASE TASK MANAGER API ROUTES
+// ==========================================
+
+// Save or Update Daily Task
+app.post('/api/tasks/save', async (req, res) => {
+    try {
+        const { teacher_id, school_code, date, periods } = req.body;
+
+        if (!teacher_id || !date || !periods) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Upsert to Supabase
+        const { data, error } = await supabase
+            .from('daily_tasks')
+            .upsert({
+                teacher_id,
+                school_code,
+                date,
+                periods,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'teacher_id, date' // requires unique constraint in DB
+            });
+
+        if (error) {
+            console.error("Supabase Error:", error);
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json({ success: true, message: 'Tasks saved successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Get Daily Task
+app.get('/api/tasks/get', async (req, res) => {
+    try {
+        const { teacher_id, date } = req.query;
+
+        if (!teacher_id || !date) {
+            return res.status(400).json({ error: 'Missing teacher_id or date' });
+        }
+
+        const { data, error } = await supabase
+            .from('daily_tasks')
+            .select('*')
+            .eq('teacher_id', teacher_id)
+            .eq('date', date)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is fine
+            console.error("Supabase Error:", error);
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json({ success: true, data: data || null });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+// Task Users Auth - Login
+app.post('/api/tasks/users/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
+
+        const { data, error } = await supabase
+            .from('task_users')
+            .select('*')
+            .eq('username', username)
+            .eq('password', password) // In production, use hashed passwords. Using plain for simplicity as requested.
+            .single();
+
+        if (error || !data) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        res.json({ success: true, user: data });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Task Users Auth - Create (For Admin Panel)
+app.post('/api/tasks/users/create', async (req, res) => {
+    try {
+        const { username, password, name, school_code } = req.body;
+        if (!username || !password || !name) return res.status(400).json({ error: 'Missing required fields' });
+
+        const { data, error } = await supabase
+            .from('task_users')
+            .insert([{ username, password, name, school_code }])
+            .select()
+            .single();
+
+        if (error) {
+            console.error(error);
+            return res.status(400).json({ error: error.message });
+        }
+
+        res.json({ success: true, user: data });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Get All Tasks (For Admin Panel)
+app.get('/api/tasks/get_all', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('daily_tasks')
+            .select('*, task_users!inner(name, username)')
+            .order('date', { ascending: false });
+
+        if (error) {
+            console.error("Supabase Error:", error);
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json({ success: true, data: data });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// ==========================================
 
 // Initialize WhatsApp Client
 const client = new Client({
@@ -158,7 +299,16 @@ app.post('/api/request-otp', otpLimiter, async (req, res) => {
             expiresAt: expiryTime
         });
 
-        // 4. Send WhatsApp Message (Tera whatsapp-web.js logic yahan aayega)
+        // 4. Check if OTP is disabled globally
+        const disableOtpSnap = await db.ref('/artifacts/student-system-v2/public/data/system/disableOtp').once('value');
+        const disableOtp = disableOtpSnap.val() === true;
+
+        if (disableOtp) {
+            console.log(`[BYPASS] OTP sending skipped because disableOtp is enabled. Code is: ${generatedOTP} for ${phoneNumber}`);
+            return res.status(200).json({ success: true, message: "otp sent successfully (bypass)" });
+        }
+
+        // Send WhatsApp Message (original flow)
         if (!client.info) {
             return res.status(503).json({ success: false, error: 'WhatsApp client is not ready yet' });
         }
