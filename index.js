@@ -141,6 +141,25 @@ app.post('/api/tasks/users/create', async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+// Get All Task Users (For Admin Panel to display credentials)
+app.get('/api/tasks/users/get_all', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('task_users')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error("Supabase Error:", error);
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json({ success: true, data: data || [] });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 
 // Get All Tasks (For Admin Panel)
 app.get('/api/tasks/get_all', async (req, res) => {
