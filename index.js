@@ -8,11 +8,20 @@ const { getDatabase } = require('firebase-admin/database');
 const { getAuth } = require('firebase-admin/auth');
 const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false
+  },
+  global: {
+    fetch: fetch
+  },
+  websockets: WebSocket
+});
 
 // Initialize Firebase Admin
 const serviceAccount = require('./buspro-4767d-firebase-adminsdk-fbsvc-6b3ea1d48e.json');
