@@ -51,6 +51,17 @@ app.post('/api/tasks/save', async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
+        // Verify user is active before allowing save
+        const { data: userData, error: userError } = await supabase
+            .from('task_users')
+            .select('is_active')
+            .eq('username', teacher_id)
+            .single();
+
+        if (!userError && userData && userData.is_active === false) {
+            return res.status(403).json({ error: 'Your account has been deactivated by the admin.' });
+        }
+
         // Upsert to Supabase
         const { data, error } = await supabase
             .from('daily_tasks')
