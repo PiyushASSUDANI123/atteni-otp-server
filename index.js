@@ -165,6 +165,42 @@ app.post('/api/tasks/users/create', async (req, res) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
+
+// Update Password
+app.post('/api/tasks/users/update_password', async (req, res) => {
+    try {
+        const { username, old_password, new_password } = req.body;
+        if (!username || !new_password) return res.status(400).json({ error: 'Missing required fields' });
+
+        if (old_password) {
+            const { data: user, error: verifyError } = await supabase
+                .from('task_users')
+                .select('*')
+                .eq('username', username)
+                .single();
+            if (verifyError || !user) return res.status(404).json({ error: 'User not found' });
+            if (user.password !== old_password) return res.status(401).json({ error: 'Incorrect old password' });
+        }
+
+        const { data, error } = await supabase
+            .from('task_users')
+            .update({ password: new_password })
+            .eq('username', username)
+            .select()
+            .single();
+
+        if (error) {
+            console.error(error);
+            return res.status(400).json({ error: error.message });
+        }
+
+        res.json({ success: true, message: 'Password updated successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 // Toggle User Status
 app.post('/api/tasks/users/toggle_status', async (req, res) => {
     try {
