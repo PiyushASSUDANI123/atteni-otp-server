@@ -9,6 +9,7 @@ const { getAuth } = require('firebase-admin/auth');
 const rateLimit = require('express-rate-limit');
 const { createClient } = require('@supabase/supabase-js');
 const WebSocket = require('ws');
+const path = require('path');
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL || '';
@@ -37,6 +38,12 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve Privacy Policies Static Files
+app.use('/Atteni_privacypolicies', express.static(path.join(__dirname, '../Atteni_privacypolicies')));
+
+// Enable trust proxy so rate limiter uses real IP from reverse proxy
+app.set('trust proxy', 1);
 
 // ==========================================
 // SUPABASE TASK MANAGER API ROUTES
